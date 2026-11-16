@@ -1,5 +1,5 @@
 # SIPENIL
-Sistem Informasi Pengelolaan dan Kalkulasi Nilai Mahasiswa.(beta test hanya Prodi Sistem Informasi)
+Sistem Informasi Pengelolaan dan Kalkulasi Nilai Mahasiswa. (beta test hanya ada Prodi Sistem Informasi)
 
 
 ## Teknologi
