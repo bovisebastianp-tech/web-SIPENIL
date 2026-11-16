@@ -13,7 +13,7 @@ https://bovisebastianp-tech.github.io/web-SIPENIL/
 ## Akun awal
 | Peran | Username | Password awal |
 |---|---|---|
-| Admin | `admin` | `admin123` |
+| Admin | `hanya klp 5 yg tahu kalian ga boleh` | `hanya klp 5 yg tahu kalian ga boleh` |
 | Dosen | nama depan huruf kecil (misal. `warno`, `mamun`) | `test123` |
 | Mahasiswa | NIM | `test123` |
 
