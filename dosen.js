@@ -1,4 +1,12 @@
 /* ============ DOSEN ============ */
+// Daftar nilai: hanya mata kuliah milik dosen yang sedang login (selain itu daftar kosong)
+LISTS.nilai={size:25,unit:'mahasiswa',defaults:{status:'all'},emptyAll:'Belum ada mahasiswa. Admin dapat mendaftarkan lewat menu Plotting.',empty:emptyRow(9),
+  items:()=>{const u=me(),c=course(UI.cid);if(!u||u.role!=='dosen'||!c||c.dosenId!==u.id)return [];
+    return enrOf(c.id).map(e=>({e,m:user(e.m),r:calc(c,e.s)})).filter(x=>x.m)},
+  match:(x,st)=>qMatch(st.q,x.m.nim,x.m.nama)&&(st.status==='all'||(st.status==='complete')===x.r.complete),
+  row:({e,m,r})=>{const c=course(UI.cid);return `<tr data-m="${e.m}"><td data-l="NIM">${esc(m.nim)}</td><td data-l="Nama"><b>${esc(m.nama)}</b></td>
+      ${COMP.map(k=>`<td class="num" data-l="${k[1]} (${c.w[k[0]]}%)"><input type="number" min="0" max="100" step="0.01" inputmode="decimal" data-score="${e.m}|${k[0]}" value="${e.s[k[0]]??''}" ${c.locked?'disabled':''} aria-label="${k[1]} ${esc(m.nama)}"></td>`).join('')}
+      <td class="num" data-l="Nilai akhir" data-cell="tot">${fmt(r.total)}</td><td class="num" data-l="Huruf" data-cell="g">${pill(r.letter)}</td></tr>`}};
 function viewDosen(){
   const u=me();
   if(UI.cid){return shell([['courses','Mata Kuliah Saya']],viewCourse(UI.cid))}
@@ -22,12 +30,11 @@ function viewCourse(cid){
   let b='';
   const lockNote=c.locked?`<div class="alert info" style="margin-bottom:14px">Nilai sudah dikunci &amp; dipublikasi. Buka kunci (dengan alasan) di tab <b>Rekap &amp; Publikasi</b> untuk melakukan koreksi; publikasi akan ditarik sampai Anda mempublikasikan ulang.</div>`:'';
   if(tab==='nilai'){
-    const es=enrOf(cid);
-    b=lockNote+`<div class="card"><div class="tw"><table class="cards-m"><thead><tr><th>NIM</th><th>Nama</th>${COMP.map(k=>`<th class="num">${k[1]}<br><span style="font-weight:500">${c.w[k[0]]}%</span></th>`).join('')}<th class="num">Akhir</th><th class="num">Huruf</th></tr></thead><tbody>
-    ${es.map(e=>{const r=calc(c,e.s),m=user(e.m);return `<tr data-m="${e.m}"><td data-l="NIM">${esc(m.nim)}</td><td data-l="Nama"><b>${esc(m.nama)}</b></td>
-      ${COMP.map(k=>`<td class="num" data-l="${k[1]} (${c.w[k[0]]}%)"><input type="number" min="0" max="100" step="0.01" inputmode="decimal" data-score="${e.m}|${k[0]}" value="${e.s[k[0]]??''}" ${c.locked?'disabled':''} aria-label="${k[1]} ${esc(m.nama)}"></td>`).join('')}
-      <td class="num" data-l="Nilai akhir" data-cell="tot">${fmt(r.total)}</td><td class="num" data-l="Huruf" data-cell="g">${pill(r.letter)}</td></tr>`}).join('')||'<tr><td colspan="9" class="muted">Belum ada mahasiswa. Admin dapat mendaftarkan lewat menu Plotting.</td></tr>'}
-    </tbody></table></div><p class="small muted" style="margin:12px 0 0">Kosongkan kolom jika belum dinilai. Nilai akhir menghitung komponen kosong sebagai 0 sampai semuanya terisi. Perubahan tersimpan otomatis.</p></div>`;
+    const p=listParts('nilai');
+    b=lockNote+`<div class="card"><div class="lst" data-list="nilai">${listHead('nilai',{ph:'Cari nama mahasiswa atau NIM...',
+      filters:[{key:'status',label:'Filter status nilai',options:[['all','Semua mahasiswa'],['complete','Nilai lengkap'],['incomplete','Nilai belum lengkap']]}]},p)}
+    <div class="tw"><table class="cards-m"><thead><tr><th>NIM</th><th>Nama</th>${COMP.map(k=>`<th class="num">${k[1]}<br><span style="font-weight:500">${c.w[k[0]]}%</span></th>`).join('')}<th class="num">Akhir</th><th class="num">Huruf</th></tr></thead><tbody data-rows>${p.rows}</tbody></table></div>${listFoot(p)}</div>
+    <p class="small muted" style="margin:12px 0 0">Kosongkan kolom jika belum dinilai. Nilai akhir menghitung komponen kosong sebagai 0 sampai semuanya terisi. Perubahan tersimpan otomatis. Pencarian dan filter hanya mengubah tampilan, bukan data nilai.</p></div>`;
   }
   if(tab==='bobot'){
     const sum=r2(COMP.reduce((t,k)=>t+(+c.w[k[0]]||0),0));

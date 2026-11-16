@@ -11,7 +11,7 @@ function done(msg){if(!save())return false;render();if(msg)toast(msg);return tru
 
 /* ============ HAK AKSES (lapis kedua; penegakan sebenarnya di server pada Tahap 2) ============ */
 const ACT_ROLE={uAdd:'admin',uEdit:'admin',uReset:'admin',uDel:'admin',cAdd:'admin',cEdit:'admin',cDel:'admin',
-  plotC:'admin',plotD:'admin',plotM:'admin',khsS:'admin',
+  plotC:'admin',plotD:'admin',plotM:'admin',plotAll:'admin',plotNone:'admin',khsS:'admin',
   open:'dosen',back:'dosen',ctab:'dosen',wSave:'dosen',csvGo:'dosen',publish:'dosen',unlock:'dosen',simT:'mahasiswa'};
 // mata kuliah milik dosen yang sedang login; null + pesan bila bukan miliknya
 function myCourse(id){
@@ -72,8 +72,8 @@ const INITIAL_PWS=[PW_DEFAULT,PW_ADMIN_DEFAULT];
 const A={
   logout(){SESSION=null;try{sessionStorage.removeItem('sipenil.u')}catch(e){}UI={sim:{}};render()},
   tab(el){UI.tab=el.dataset.v;UI.cid=null;render()},
-  open(el){const c=myCourse(el.dataset.id);if(c)go({cid:c.id,ctab:'nilai'})},
-  back(){go({cid:null})},
+  open(el){const c=myCourse(el.dataset.id);if(c){if(UI.f)delete UI.f.nilai;go({cid:c.id,ctab:'nilai'})}},   // filter nilai dimulai bersih untuk tiap mata kuliah
+  back(){if(UI.f)delete UI.f.nilai;go({cid:null})},
   ctab(el){go({ctab:el.dataset.v})},
   chPw(){
     const u=me();
@@ -111,24 +111,40 @@ const A={
     const n=enrOf(c.id).filter(e=>Object.values(e.s).some(v=>v!=null)).length;
     confirmBox(`Hapus mata kuliah ${c.nama}? ${c.published?'Nilai mata kuliah ini SUDAH DIPUBLIKASI; KHS, IPS, dan IPK mahasiswa ikut berubah. ':''}${n?`${n} mahasiswa sudah memiliki nilai dan semuanya akan terhapus. `:''}Tindakan ini tidak dapat dibatalkan.`,
       ()=>{DB.courses=DB.courses.filter(x=>x.id!==c.id);DB.enr=DB.enr.filter(e=>e.c!==c.id);DB.log=DB.log.filter(l=>l.c!==c.id);done('Mata kuliah dihapus')},'Hapus')},
-  plotC(el){UI.plotC=el.value;render()},
+  plotC(el){UI.plotC=el.value;if(UI.f&&UI.f.plot)UI.f.plot.page=1;render()},
   plotD(el){const c=course(UI.plotC||DB.courses[0]?.id);if(!c||!user(el.value))return;
     if(c.dosenId===el.value)return;
     logAdd(c.id,`Dosen pengampu diganti: ${user(c.dosenId)?.nama||'-'} → ${user(el.value).nama}`);
     c.dosenId=el.value;done('Dosen diperbarui')},
-  plotM(el){const c=course(UI.plotC||DB.courses[0]?.id);if(!c||!user(el.dataset.id)){render();return}
-    if(c.published){toast('Mata kuliah sudah dipublikasi. Tarik publikasi dulu untuk mengubah peserta.');render();return}
+  plotM(el){const c=course(plotCid());if(!c||!user(el.dataset.id)){plotSync();return}
+    if(c.published){toast('Mata kuliah sudah dipublikasi. Tarik publikasi dulu untuk mengubah peserta.');plotSync();return}
     const mid=el.dataset.id;
+    // daftar tidak digambar ulang: baris tetap di tempatnya walau filter "sudah/belum mengambil" sedang aktif
     if(el.checked){
       if(!DB.enr.some(e=>e.c===c.id&&e.m===mid)) DB.enr.push({c:c.id,m:mid,s:emptyScores()});
-      done();
+      if(save()) plotSync();
     }else{
       const e=DB.enr.find(x=>x.c===c.id&&x.m===mid);
       const has=e&&Object.values(e.s).some(v=>v!=null);
-      const rm=()=>{DB.enr=DB.enr.filter(x=>!(x.c===c.id&&x.m===mid));done()};
-      if(has) confirmBox(`${user(mid).nama} sudah memiliki nilai di mata kuliah ini. Mengeluarkan akan menghapus nilainya. Lanjutkan?`,rm,'Keluarkan',()=>render());
+      const rm=()=>{DB.enr=DB.enr.filter(x=>!(x.c===c.id&&x.m===mid));if(save())plotSync()};
+      if(has) confirmBox(`${user(mid).nama} sudah memiliki nilai di mata kuliah ini. Mengeluarkan akan menghapus nilainya. Lanjutkan?`,rm,'Keluarkan',()=>plotSync());
       else rm();
     }},
+  // Pilih semua / batalkan: berlaku untuk SEMUA hasil filter yang sedang aktif (semua halaman), bukan seluruh mahasiswa
+  plotAll(){const c=course(plotCid());if(!c)return;
+    if(c.published){toast('Mata kuliah sudah dipublikasi. Tarik publikasi dulu untuk mengubah peserta.');return}
+    const add=listResults('plot').filter(x=>!x.taken);
+    if(!add.length){toast('Semua mahasiswa pada hasil ini sudah terpilih');return}
+    add.forEach(x=>DB.enr.push({c:c.id,m:x.u.id,s:emptyScores()}));
+    if(!save())return; plotSync(); toast(`${add.length} mahasiswa ditambahkan`)},
+  plotNone(){const c=course(plotCid());if(!c)return;
+    if(c.published){toast('Mata kuliah sudah dipublikasi. Tarik publikasi dulu untuk mengubah peserta.');return}
+    const ids=new Set(listResults('plot').filter(x=>x.taken).map(x=>x.u.id));
+    if(!ids.size){toast('Tidak ada mahasiswa terpilih pada hasil ini');return}
+    const graded=enrOf(c.id).filter(e=>ids.has(e.m)&&Object.values(e.s).some(v=>v!=null)).length;
+    const go_=()=>{DB.enr=DB.enr.filter(e=>!(e.c===c.id&&ids.has(e.m)));if(!save())return;plotSync();toast(`${ids.size} mahasiswa dikeluarkan`)};
+    if(graded) confirmBox(`${graded} dari ${ids.size} mahasiswa sudah memiliki nilai di mata kuliah ini. Mengeluarkan mereka akan menghapus nilainya. Lanjutkan?`,go_,'Keluarkan');
+    else go_()},
   khsS(el){UI.khsS=el.value;render()},
   simT(el){UI.sim[el.dataset.id]={t:el.value};render()},
   wSave(){const c=myCourse();if(!c)return;
