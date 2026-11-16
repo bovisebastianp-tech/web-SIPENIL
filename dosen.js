@@ -12,14 +12,15 @@ function viewDosen(){
   return shell([['courses','Mata Kuliah Saya']],b);
 }
 function viewCourse(cid){
-  const c=course(cid); if(!c) return '';
+  const c=course(cid);
+  if(!c||c.dosenId!==me().id) return `<button class="btn ghost sm" data-a="back">&larr; Kembali</button><div class="card muted" style="margin-top:14px">Mata kuliah tidak ditemukan atau bukan tanggung jawab Anda.</div>`;
   const tab=UI.ctab||'nilai';
   const head=`<button class="btn ghost sm no-print" data-a="back">&larr; Kembali</button>
   <div class="row between" style="margin:14px 0 0"><div><h1>${esc(c.nama)}</h1><div class="muted small">${esc(c.kode)} &middot; ${c.sks} SKS &middot; ${esc(c.semester)}</div></div>
   <div class="row">${statusBadge(c)}${c.locked?'<span class="badge b-lock">Terkunci</span>':''}</div></div>
   <div class="sub-tabs">${[['nilai','Input Nilai'],['bobot','Bobot Nilai'],['impor','Impor CSV'],['rekap','Rekap & Publikasi'],['log','Riwayat Perubahan']].map(t=>`<button class="${tab===t[0]?'on':''}" data-a="ctab" data-v="${t[0]}">${t[1]}</button>`).join('')}</div>`;
   let b='';
-  const lockNote=c.locked?`<div class="alert info" style="margin-bottom:14px">Nilai sudah dikunci &amp; dipublikasi. Buka kunci (dengan alasan) di tab <b>Rekap &amp; Publikasi</b> untuk melakukan koreksi.</div>`:'';
+  const lockNote=c.locked?`<div class="alert info" style="margin-bottom:14px">Nilai sudah dikunci &amp; dipublikasi. Buka kunci (dengan alasan) di tab <b>Rekap &amp; Publikasi</b> untuk melakukan koreksi; publikasi akan ditarik sampai Anda mempublikasikan ulang.</div>`:'';
   if(tab==='nilai'){
     const es=enrOf(cid);
     b=lockNote+`<div class="card"><div class="tw"><table class="cards-m"><thead><tr><th>NIM</th><th>Nama</th>${COMP.map(k=>`<th class="num">${k[1]}<br><span style="font-weight:500">${c.w[k[0]]}%</span></th>`).join('')}<th class="num">Akhir</th><th class="num">Huruf</th></tr></thead><tbody>
@@ -29,20 +30,22 @@ function viewCourse(cid){
     </tbody></table></div><p class="small muted" style="margin:12px 0 0">Kosongkan kolom jika belum dinilai. Nilai akhir menghitung komponen kosong sebagai 0 sampai semuanya terisi. Perubahan tersimpan otomatis.</p></div>`;
   }
   if(tab==='bobot'){
-    const sum=COMP.reduce((t,k)=>t+(+c.w[k[0]]||0),0);
-    b=lockNote+`<div class="card stack"><div class="grid g3">${COMP.map(k=>`<div><label>${k[1]} (%)</label><input type="number" min="0" max="100" data-w="${k[0]}" value="${c.w[k[0]]}" ${c.locked?'disabled':''}></div>`).join('')}</div>
-    <div class="row between"><div>Total bobot: <span id="wsum" class="wsum ${sum===100?'ok':'bad'}">${sum}%</span> <span class="muted small">(wajib 100%)</span></div>
+    const sum=r2(COMP.reduce((t,k)=>t+(+c.w[k[0]]||0),0));
+    b=lockNote+`<div class="card stack"><div class="grid g3">${COMP.map(k=>`<div><label>${k[1]} (%)</label><input type="number" min="0" max="100" step="0.01" inputmode="decimal" data-w="${k[0]}" value="${c.w[k[0]]}" ${c.locked?'disabled':''}></div>`).join('')}</div>
+    <div class="row between"><div>Total bobot: <span id="wsum" class="wsum ${Math.abs(sum-100)<0.005?'ok':'bad'}">${sum}%</span> <span class="muted small">(wajib 100%)</span></div>
     <button class="btn" data-a="wSave" ${c.locked?'disabled':''}>Simpan bobot</button></div></div>
     <div class="card" style="margin-top:16px"><h3 style="margin-bottom:8px">Skala huruf mutu</h3><div class="row">${SCALE.map(s=>`<span>${pill(s[0])} <span class="small muted">&ge; ${s[1]} (${s[2].toFixed(1)})</span></span>`).join('')}</div></div>`;
   }
   if(tab==='impor'){
-    b=lockNote+`<div class="card stack"><p style="margin:0">Tempel data atau pilih berkas CSV dengan kolom:<br><code>NIM,kehadiran,tugas1,tugas2,uts,uas</code></p>
+    b=lockNote+`<div class="card stack"><p style="margin:0">Tempel data atau pilih berkas CSV dengan kolom:<br><code>NIM,kehadiran,tugas1,tugas2,uts,uas</code><br><span class="small muted">Header boleh ada dan urutan kolom boleh berbeda. Pemisah koma, titik koma, atau tab. Nilai 0&ndash;100, maksimal 2 desimal. Jika ada satu baris bermasalah, tidak ada nilai yang diimpor.</span></p>
     <input type="file" id="csvFile" accept=".csv,.txt,text/csv" ${c.locked?'disabled':''}>
     <textarea id="csvText" rows="7" placeholder="2401001,95,80,85,70,78&#10;2401002,90,75,,60," ${c.locked?'disabled':''}></textarea>
-    <div class="row"><button class="btn" data-a="csvGo" ${c.locked?'disabled':''}>Impor nilai</button><span class="small muted">Sel kosong akan dilewati (nilai lama tidak diubah).</span></div></div>`;
+    <div class="row"><button class="btn" data-a="csvGo" ${c.locked?'disabled':''}>Impor nilai</button><span class="small muted">Sel kosong akan dilewati (nilai lama tidak diubah).</span></div><div id="csvReport" aria-live="polite"></div></div>`;
   }
   if(tab==='rekap'){
     const es=enrOf(cid);const rs=es.map(e=>calc(c,e.s));const done=rs.filter(r=>r.complete).length;
+    const incomplete=es.filter((e,i)=>!rs[i].complete).map(e=>user(e.m));
+    const wOk=calc(c,{}).weightOk;
     const avg=rs.length?rs.reduce((t,r)=>t+r.total,0)/rs.length:0;
     const dist={};SCALE.forEach(s=>dist[s[0]]=0);rs.forEach(r=>dist[r.letter]++);
     b=`<div class="grid g3"><div class="card stat"><div class="muted small">Mahasiswa</div><div class="n">${es.length}</div></div>
@@ -52,8 +55,9 @@ function viewCourse(cid){
     <div class="card stack" style="margin-top:16px"><h3>Publikasi</h3>
     ${c.published?`<div class="alert info">Nilai akhir sudah dapat dilihat mahasiswa. Untuk koreksi, buka kunci terlebih dahulu; setiap perubahan dicatat di riwayat.</div><div><button class="btn danger" data-a="unlock">Buka kunci untuk koreksi</button></div>`
     :`<p class="muted" style="margin:0">Sebelum dipublikasi, mahasiswa hanya melihat nilai komponen. Setelah "Kunci &amp; Publikasi", nilai akhir dan huruf mutu muncul dan input dikunci.</p>
-    ${done<es.length?`<div class="alert">Masih ada ${es.length-done} mahasiswa dengan komponen nilai kosong (dihitung 0).</div>`:''}
-    <div><button class="btn" data-a="publish" ${es.length?'':'disabled'}>Kunci &amp; Publikasi</button></div>`}</div>`;
+    ${!wOk?`<div class="alert">Total bobot belum 100%. Perbaiki di tab Bobot Nilai sebelum publikasi.</div>`:''}
+    ${incomplete.length?`<div class="alert"><b>Belum bisa dipublikasi:</b> ${incomplete.length} mahasiswa belum memiliki nilai lengkap &mdash; ${esc(incomplete.slice(0,8).map(m=>m.nama).join(', '))}${incomplete.length>8?` dan ${incomplete.length-8} lainnya`:''}.</div>`:''}
+    <div><button class="btn" data-a="publish" ${es.length&&!incomplete.length&&wOk?'':'disabled'}>Kunci &amp; Publikasi</button></div>`}</div>`;
   }
   if(tab==='log'){
     const L=DB.log.filter(l=>l.c===cid);

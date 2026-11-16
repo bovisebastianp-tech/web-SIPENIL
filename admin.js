@@ -17,23 +17,24 @@ function viewAdmin(){
     <div class="card"><div class="tw"><table class="cards-m"><thead><tr><th>Kode</th><th>Nama</th><th class="num">SKS</th><th>Semester</th><th>Dosen</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
     ${DB.courses.map(c=>`<tr><td data-l="Kode">${esc(c.kode)}</td><td data-l="Nama">${esc(c.nama)}</td><td class="num" data-l="SKS">${c.sks}</td><td data-l="Semester">${esc(c.semester)}</td>
       <td data-l="Dosen">${esc(user(c.dosenId)?.nama||'-')}</td><td data-l="Status">${statusBadge(c)}</td>
-      <td class="full"><div class="row"><button class="btn ghost sm" data-a="cEdit" data-id="${c.id}">Ubah</button><button class="btn danger sm" data-a="cDel" data-id="${c.id}">Hapus</button></div></td></tr>`).join('')}
+      <td class="full"><div class="row"><button class="btn ghost sm" data-a="cEdit" data-id="${c.id}">Ubah</button><button class="btn danger sm" data-a="cDel" data-id="${c.id}">Hapus</button></div></td></tr>`).join('')||'<tr><td colspan="7" class="muted">Belum ada mata kuliah. Klik "+ Tambah" untuk membuat.</td></tr>'}
     </tbody></table></div></div>`;
   }
   if(t==='plot'){
-    const cid=UI.plotC||DB.courses[0]?.id; const c=course(cid);
+    const cid=course(UI.plotC)?UI.plotC:DB.courses[0]?.id; const c=course(cid);
     const students=DB.users.filter(u=>u.role==='mahasiswa');
     const enrolled=new Set(enrOf(cid).map(e=>e.m));
-    b=`<h2 style="margin-bottom:14px">Plotting Dosen &amp; Mahasiswa</h2>
+    b=`<h2 style="margin-bottom:14px">Plotting Dosen &amp; Mahasiswa</h2>`+(!c?`<div class="card muted">Belum ada mata kuliah. Tambahkan di menu Mata Kuliah terlebih dahulu.</div>`:
+    `${c.published?`<div class="alert info" style="margin-bottom:14px">Mata kuliah ini sudah dipublikasi, jadi mahasiswa tidak dapat ditambah atau dikeluarkan. Dosen tetap dapat diganti.</div>`:''}
     <div class="card stack"><div class="grid g2"><div><label>Mata kuliah</label><select data-a="plotC">${DB.courses.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.kode+' - '+x.nama+' ('+x.semester+')')}</option>`).join('')}</select></div>
     <div><label>Dosen pengampu</label><select data-a="plotD">${DB.users.filter(u=>u.role==='dosen').map(d=>`<option value="${d.id}" ${c&&d.id===c.dosenId?'selected':''}>${esc(d.nama)}</option>`).join('')}</select></div></div>
     <div><label>Mahasiswa terdaftar (${enrolled.size} dari ${students.length})</label>
-    <div class="grid g3">${students.map(s=>`<label style="font-weight:500;display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" style="width:auto" data-a="plotM" data-id="${s.id}" ${enrolled.has(s.id)?'checked':''}>${esc(s.nama)} <span class="muted small">${esc(s.nim)}</span></label>`).join('')}</div></div></div>`;
+    <div class="grid g3">${students.map(s=>`<label style="font-weight:500;display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" style="width:auto" data-a="plotM" data-id="${s.id}" ${enrolled.has(s.id)?'checked':''} ${c.published?'disabled':''}>${esc(s.nama)} <span class="muted small">${esc(s.nim)}</span></label>`).join('')||'<span class="muted">Belum ada mahasiswa.</span>'}</div></div></div>`);
   }
   if(t==='khs'){
     const students=DB.users.filter(u=>u.role==='mahasiswa');
-    const sid=UI.khsS||students[0]?.id;
-    b=`<h2 style="margin-bottom:14px" class="no-print">Cetak KHS</h2><div class="card no-print row" style="margin-bottom:16px"><div style="flex:1;min-width:220px"><label>Mahasiswa</label><select data-a="khsS">${students.map(s=>`<option value="${s.id}" ${s.id===sid?'selected':''}>${esc(s.nim+' - '+s.nama)}</option>`).join('')}</select></div></div>`+khsView(sid);
+    const sid=students.some(x=>x.id===UI.khsS)?UI.khsS:students[0]?.id;
+    b=`<h2 style="margin-bottom:14px" class="no-print">Cetak KHS</h2>`+(!students.length?'':`<div class="card no-print row" style="margin-bottom:16px"><div style="flex:1;min-width:220px"><label>Mahasiswa</label><select data-a="khsS">${students.map(s=>`<option value="${s.id}" ${s.id===sid?'selected':''}>${esc(s.nim+' - '+s.nama)}</option>`).join('')}</select></div></div>`)+(students.length?khsView(sid):'<div class="card muted">Belum ada mahasiswa.</div>');
   }
   return shell(adminTabs(),b);
 }
